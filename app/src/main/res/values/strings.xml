@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">LockGuard</string>
+    <string name="monitor_notification_title">LockGuard 正在监控</string>
+    <string name="monitor_notification_channel">LockGuard 监控</string>
+</resources>
+

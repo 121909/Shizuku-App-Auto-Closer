@@ -1,0 +1,8 @@
+<resources>
+    <style name="Theme.LockGuard" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/md_theme_dark_primary</item>
+        <item name="colorSecondary">@color/md_theme_dark_secondary</item>
+        <item name="colorTertiary">@color/md_theme_dark_tertiary</item>
+    </style>
+</resources>
+
