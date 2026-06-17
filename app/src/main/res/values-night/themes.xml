@@ -3,6 +3,8 @@
         <item name="colorPrimary">@color/md_theme_dark_primary</item>
         <item name="colorSecondary">@color/md_theme_dark_secondary</item>
         <item name="colorTertiary">@color/md_theme_dark_tertiary</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">@color/screen_background</item>
+        <item name="android:navigationBarColor">@color/screen_background</item>
     </style>
 </resources>
-

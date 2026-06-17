@@ -1,8 +1,10 @@
 <resources>
+    <color name="screen_background">#FFFFFF</color>
     <color name="text_primary">#111827</color>
     <color name="text_secondary">#4B5563</color>
     <color name="item_normal">#FFFFFF</color>
     <color name="item_selected">#E8F5FF</color>
+    <color name="control_tint">#6B7280</color>
     <color name="md_theme_light_primary">#2563EB</color>
     <color name="md_theme_light_secondary">#0F766E</color>
     <color name="md_theme_light_tertiary">#B91C1C</color>
@@ -10,4 +12,3 @@
     <color name="md_theme_dark_secondary">#5EEAD4</color>
     <color name="md_theme_dark_tertiary">#FCA5A5</color>
 </resources>
-

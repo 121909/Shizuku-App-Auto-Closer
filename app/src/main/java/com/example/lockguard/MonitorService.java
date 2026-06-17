@@ -205,8 +205,10 @@ public final class MonitorService extends Service {
                 updateNotification();
                 return;
             }
-            boolean ok = ShizukuRemoteStopper.forceStop(this, config.packageName);
-            Log.i(TAG, "forceStop(" + config.packageName + ")=" + ok);
+            for (String packageName : config.packageNames) {
+                boolean ok = ShizukuRemoteStopper.forceStop(this, packageName);
+                Log.i(TAG, "forceStop(" + packageName + ")=" + ok);
+            }
             updateNotification();
         };
         handler.postDelayed(pendingStop, Math.max(1, config.delayMinutes) * 60L * 1000L);
@@ -290,9 +292,8 @@ public final class MonitorService extends Service {
         if (!cfg.enabled) {
             return "监控已关闭";
         }
-        String target = cfg.appLabel == null || cfg.appLabel.isEmpty() ? cfg.packageName : cfg.appLabel;
         return String.format(Locale.getDefault(), "%s | %s | %s | 解锁取消=%s",
-                target,
+                cfg.formatTargets(),
                 cfg.formatWindow(),
                 cfg.formatDelay(),
                 cfg.cancelOnUnlock ? "是" : "否");

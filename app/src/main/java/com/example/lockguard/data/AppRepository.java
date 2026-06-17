@@ -26,10 +26,9 @@ public final class AppRepository {
             String packageName = info.activityInfo.packageName;
             if (selfPackage.equals(packageName)) continue;
             CharSequence label = info.loadLabel(pm);
-            result.add(new TargetApp(label == null ? packageName : label.toString(), packageName));
+            result.add(new TargetApp(label == null ? packageName : label.toString(), packageName, info.loadIcon(pm)));
         }
         Collections.sort(result, Comparator.comparing(app -> app.label, String.CASE_INSENSITIVE_ORDER));
         return result;
     }
 }
-

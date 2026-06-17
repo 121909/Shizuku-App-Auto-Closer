@@ -3,7 +3,8 @@ package com.example.lockguard;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.RadioButton;
+import android.widget.CheckBox;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -13,31 +14,58 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.lockguard.data.TargetApp;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 
 public final class AppAdapter extends RecyclerView.Adapter<AppAdapter.VH> {
     public interface Listener {
-        void onAppSelected(TargetApp app);
+        void onAppSelectionChanged(TargetApp app, boolean selected);
     }
 
     private final ArrayList<TargetApp> items = new ArrayList<>();
+    private final ArrayList<TargetApp> allItems = new ArrayList<>();
     private final Listener listener;
-    private String selectedPackage;
+    private final HashSet<String> selectedPackages = new HashSet<>();
 
     public AppAdapter(Listener listener) {
         this.listener = listener;
     }
 
-    public void submit(List<TargetApp> apps, String selectedPackage) {
-        items.clear();
-        items.addAll(apps);
-        this.selectedPackage = selectedPackage;
+    public void submit(List<TargetApp> apps, Collection<String> selectedPackages) {
+        allItems.clear();
+        allItems.addAll(apps);
+        setSelectedPackagesInternal(selectedPackages);
+        rebuildItems();
         notifyDataSetChanged();
     }
 
-    public void setSelectedPackage(String selectedPackage) {
-        this.selectedPackage = selectedPackage;
+    public void setSelectedPackages(Collection<String> selectedPackages) {
+        setSelectedPackagesInternal(selectedPackages);
+        rebuildItems();
         notifyDataSetChanged();
+    }
+
+    private void setSelectedPackagesInternal(Collection<String> packages) {
+        selectedPackages.clear();
+        if (packages == null) {
+            return;
+        }
+        for (String packageName : packages) {
+            if (packageName != null && !packageName.isEmpty()) {
+                selectedPackages.add(packageName);
+            }
+        }
+    }
+
+    private void rebuildItems() {
+        items.clear();
+        items.addAll(allItems);
+        items.sort(Comparator
+                .comparing((TargetApp app) -> !selectedPackages.contains(app.packageName))
+                .thenComparing(app -> app.label.toLowerCase(Locale.getDefault())));
     }
 
     @NonNull
@@ -50,14 +78,16 @@ public final class AppAdapter extends RecyclerView.Adapter<AppAdapter.VH> {
     @Override
     public void onBindViewHolder(@NonNull VH holder, int position) {
         TargetApp app = items.get(position);
+        holder.icon.setImageDrawable(app.icon);
         holder.title.setText(app.label);
         holder.subtitle.setText(app.packageName);
-        boolean selected = app.packageName.equals(selectedPackage);
-        holder.radio.setChecked(selected);
+        boolean selected = selectedPackages.contains(app.packageName);
+        holder.checkBox.setChecked(selected);
         holder.itemView.setBackgroundColor(ContextCompat.getColor(holder.itemView.getContext(),
                 selected ? R.color.item_selected : R.color.item_normal));
-        holder.itemView.setOnClickListener(v -> listener.onAppSelected(app));
-        holder.radio.setOnClickListener(v -> listener.onAppSelected(app));
+        View.OnClickListener clickListener = v -> listener.onAppSelectionChanged(app, !selectedPackages.contains(app.packageName));
+        holder.itemView.setOnClickListener(clickListener);
+        holder.checkBox.setOnClickListener(clickListener);
     }
 
     @Override
@@ -66,16 +96,17 @@ public final class AppAdapter extends RecyclerView.Adapter<AppAdapter.VH> {
     }
 
     static final class VH extends RecyclerView.ViewHolder {
+        final ImageView icon;
         final TextView title;
         final TextView subtitle;
-        final RadioButton radio;
+        final CheckBox checkBox;
 
         VH(@NonNull View itemView) {
             super(itemView);
+            icon = itemView.findViewById(R.id.appIcon);
             title = itemView.findViewById(R.id.appTitle);
             subtitle = itemView.findViewById(R.id.appPackage);
-            radio = itemView.findViewById(R.id.appRadio);
+            checkBox = itemView.findViewById(R.id.appCheckBox);
         }
     }
 }
-

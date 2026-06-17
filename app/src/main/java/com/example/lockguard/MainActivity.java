@@ -16,9 +16,7 @@ import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -31,9 +29,12 @@ import com.example.lockguard.shizuku.ShizukuRemoteStopper;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.materialswitch.MaterialSwitch;
 
-import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import rikka.shizuku.Shizuku;
 
@@ -53,8 +54,8 @@ public final class MainActivity extends AppCompatActivity {
     private RecyclerView appList;
     private AppAdapter adapter;
 
-    private String selectedPackage = "";
-    private String selectedLabel = "";
+    private final LinkedHashSet<String> selectedPackages = new LinkedHashSet<>();
+    private final Map<String, String> selectedLabels = new HashMap<>();
     private int startMinute = 23 * 60;
     private int endMinute = 7 * 60;
     private int delayMinutes = 10;
@@ -138,8 +139,14 @@ public final class MainActivity extends AppCompatActivity {
 
     private void loadSavedConfig() {
         RuleConfig config = RuleStore.load(this);
-        selectedPackage = config.packageName == null ? "" : config.packageName;
-        selectedLabel = config.appLabel == null ? "" : config.appLabel;
+        selectedPackages.clear();
+        selectedPackages.addAll(config.packageNames);
+        selectedLabels.clear();
+        for (int i = 0; i < config.packageNames.size(); i++) {
+            String packageName = config.packageNames.get(i);
+            String label = i < config.appLabels.size() ? config.appLabels.get(i) : "";
+            selectedLabels.put(packageName, label);
+        }
         startMinute = config.startMinuteOfDay;
         endMinute = config.endMinuteOfDay;
         delayMinutes = config.delayMinutes;
@@ -156,28 +163,57 @@ public final class MainActivity extends AppCompatActivity {
         new Thread(() -> {
             List<TargetApp> apps = AppRepository.loadLaunchableApps(this);
             runOnUiThread(() -> {
-                adapter.submit(apps, selectedPackage);
-                if (selectedPackage.isEmpty()) {
+                for (TargetApp app : apps) {
+                    if (selectedPackages.contains(app.packageName)) {
+                        selectedLabels.put(app.packageName, app.label);
+                    }
+                }
+                updateSelectedAppView();
+                adapter.submit(apps, selectedPackages);
+                if (selectedPackages.isEmpty()) {
                     if (statusView.getText() == null || statusView.getText().toString().startsWith("等待")) {
-                        statusView.setText("请选择一个应用");
+                        statusView.setText("请选择应用");
                     }
                 }
             });
         }).start();
     }
 
-    private void onAppSelected(TargetApp app) {
-        selectedPackage = app.packageName;
-        selectedLabel = app.label;
+    private void onAppSelected(TargetApp app, boolean selected) {
+        if (selected) {
+            selectedPackages.add(app.packageName);
+            selectedLabels.put(app.packageName, app.label);
+        } else {
+            selectedPackages.remove(app.packageName);
+            selectedLabels.remove(app.packageName);
+        }
         updateSelectedAppView();
-        adapter.setSelectedPackage(selectedPackage);
+        adapter.setSelectedPackages(selectedPackages);
     }
 
     private void updateSelectedAppView() {
-        if (selectedPackage == null || selectedPackage.isEmpty()) {
+        if (selectedPackages.isEmpty()) {
             selectedAppView.setText("未选择应用");
+        } else if (selectedPackages.size() == 1) {
+            String packageName = selectedPackages.iterator().next();
+            String label = selectedLabels.get(packageName);
+            selectedAppView.setText(String.format(Locale.getDefault(), "%s\n%s",
+                    label == null || label.isEmpty() ? packageName : label,
+                    packageName));
         } else {
-            selectedAppView.setText(String.format(Locale.getDefault(), "%s\n%s", selectedLabel, selectedPackage));
+            StringBuilder builder = new StringBuilder();
+            builder.append("已选择 ").append(selectedPackages.size()).append(" 个应用");
+            int shown = 0;
+            for (String packageName : selectedPackages) {
+                if (shown >= 4) {
+                    builder.append("\n...");
+                    break;
+                }
+                String label = selectedLabels.get(packageName);
+                builder.append('\n').append(label == null || label.isEmpty() ? packageName : label);
+                shown++;
+            }
+            selectedAppView.setText(builder.toString());
         }
     }
 
@@ -228,14 +264,20 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private void saveConfig(boolean enabled) {
-        RuleConfig config = new RuleConfig(enabled, selectedPackage, selectedLabel, startMinute, endMinute, delayMinutes, cancelOnUnlock);
+        ArrayList<String> packages = new ArrayList<>(selectedPackages);
+        ArrayList<String> labels = new ArrayList<>();
+        for (String packageName : packages) {
+            String label = selectedLabels.get(packageName);
+            labels.add(label == null ? "" : label);
+        }
+        RuleConfig config = new RuleConfig(enabled, packages, labels, startMinute, endMinute, delayMinutes, cancelOnUnlock);
         RuleStore.save(this, config);
-        adapter.setSelectedPackage(selectedPackage);
+        adapter.setSelectedPackages(selectedPackages);
     }
 
     private boolean validateConfig() {
-        if (selectedPackage == null || selectedPackage.isEmpty()) {
-            toast("先选择一个应用");
+        if (selectedPackages.isEmpty()) {
+            toast("先选择至少一个应用");
             return false;
         }
         if (startMinute == endMinute) {
