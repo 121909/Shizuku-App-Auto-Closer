@@ -3,6 +3,7 @@ package com.example.lockguard;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.app.Service;
 import android.app.KeyguardManager;
 import android.content.BroadcastReceiver;
@@ -35,14 +36,21 @@ public final class MonitorService extends Service {
     private static final String CHANNEL_ID = "lockguard_monitor";
     private static final int NOTIFICATION_ID = 1001;
 
+    /** 服务存活标志，供同进程内的 Activity 读取（volatile：主线程读、服务生命周期线程写）。 */
+    private static volatile boolean active;
+
+    public static boolean isActive() {
+        return active;
+    }
+
     private final Object lock = new Object();
     private HandlerThread handlerThread;
     private Handler handler;
-    private RuleConfig config;
+    private volatile RuleConfig config;
     private Runnable pendingStop;
     private Runnable periodicCheck;
     private boolean receiverRegistered;
-    private boolean screenLocked;
+    private volatile boolean screenLocked;
 
     private final BroadcastReceiver receiver = new BroadcastReceiver() {
         @Override
@@ -59,11 +67,12 @@ public final class MonitorService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        active = true;
         handlerThread = new HandlerThread("LockGuardMonitor");
         handlerThread.start();
         handler = new Handler(handlerThread.getLooper());
         registerScreenReceiver();
-        startAsForeground("准备监控");
+        startAsForeground(getString(R.string.monitor_preparing));
     }
 
     @Override
@@ -89,6 +98,7 @@ public final class MonitorService extends Service {
 
     @Override
     public void onDestroy() {
+        active = false;
         cancelPendingStop();
         cancelPeriodicCheck();
         unregisterScreenReceiver();
@@ -188,20 +198,22 @@ public final class MonitorService extends Service {
     }
 
     private void schedulePendingStop() {
-        synchronized (lock) {
-            if (pendingStop != null) {
-                return;
-            }
-        }
-        if (config == null || !config.hasTarget()) {
+        RuleConfig cfg = config;
+        if (cfg == null || !cfg.hasTarget()) {
             return;
         }
-        pendingStop = () -> {
+        long delayMs = Math.max(1, cfg.delayMinutes) * 60L * 1000L;
+        Runnable stopTask = () -> {
             synchronized (lock) {
                 pendingStop = null;
             }
             reloadConfig();
             if (config == null || !config.enabled || !config.hasTarget()) {
+                updateNotification();
+                return;
+            }
+            // 执行时复查时间窗：与调度时的校验保持一致，窗口外不执行
+            if (!config.isWithinWindow(LocalTime.now())) {
                 updateNotification();
                 return;
             }
@@ -211,7 +223,14 @@ public final class MonitorService extends Service {
             }
             updateNotification();
         };
-        handler.postDelayed(pendingStop, Math.max(1, config.delayMinutes) * 60L * 1000L);
+        // 检查、赋值、注册必须在同一临界区内，避免与主线程的 cancelPendingStop 竞态
+        synchronized (lock) {
+            if (pendingStop != null) {
+                return;
+            }
+            pendingStop = stopTask;
+            handler.postDelayed(stopTask, delayMs);
+        }
     }
 
     private void ensurePeriodicCheck() {
@@ -268,7 +287,7 @@ public final class MonitorService extends Service {
         if (nm != null) {
             String status = buildStatusText();
             if (screenLocked && config != null && config.enabled && config.hasTarget() && config.isWithinWindow(LocalTime.now())) {
-                status = status + " | 等待关闭";
+                status = status + " | " + getString(R.string.monitor_waiting_stop);
             }
             nm.notify(NOTIFICATION_ID, buildNotification(status));
         }
@@ -277,10 +296,14 @@ public final class MonitorService extends Service {
     private Notification buildNotification(String status) {
         String title = getString(R.string.monitor_notification_title);
         String text = status == null ? buildStatusText() : status;
+        Intent openApp = new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent contentIntent = PendingIntent.getActivity(
+                this, 0, openApp, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
                 .setContentTitle(title)
                 .setContentText(text)
+                .setContentIntent(contentIntent)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -290,13 +313,17 @@ public final class MonitorService extends Service {
     private String buildStatusText() {
         RuleConfig cfg = RuleStore.load(this);
         if (!cfg.enabled) {
-            return "监控已关闭";
+            return getString(R.string.monitor_status_closed);
         }
-        return String.format(Locale.getDefault(), "%s | %s | %s | 解锁取消=%s",
+        String text = String.format(Locale.getDefault(), getString(R.string.monitor_status_format),
                 cfg.formatTargets(),
                 cfg.formatWindow(),
                 cfg.formatDelay(),
                 cfg.cancelOnUnlock ? "是" : "否");
+        if (!ShizukuRemoteStopper.hasShizukuPermission()) {
+            text = text + " | " + getString(R.string.monitor_shizuku_missing);
+        }
+        return text;
     }
 
     private void createChannel() {

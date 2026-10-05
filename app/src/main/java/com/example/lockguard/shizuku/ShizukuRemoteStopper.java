@@ -6,6 +6,7 @@ import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.os.IBinder;
 import android.os.RemoteException;
+import android.os.SystemClock;
 
 import com.example.lockguard.BuildConfig;
 import com.example.lockguard.remote.IStopController;
@@ -17,9 +18,12 @@ import rikka.shizuku.Shizuku;
 
 public final class ShizukuRemoteStopper {
     private static final Object LOCK = new Object();
+    /** 绑定无回调时的超时，超时后允许重新发起绑定，避免永久卡在 binding 状态。 */
+    private static final long BIND_TIMEOUT_MS = 8_000L;
     private static IStopController controller;
     private static boolean bound;
     private static boolean binding;
+    private static long bindStartedAt;
     private static CountDownLatch connectedLatch;
 
     private static final Shizuku.UserServiceArgs ARGS = new Shizuku.UserServiceArgs(
@@ -65,10 +69,14 @@ public final class ShizukuRemoteStopper {
             return false;
         }
         synchronized (LOCK) {
-            if (bound || binding) {
+            if (bound) {
+                return true;
+            }
+            if (binding && SystemClock.elapsedRealtime() - bindStartedAt < BIND_TIMEOUT_MS) {
                 return true;
             }
             binding = true;
+            bindStartedAt = SystemClock.elapsedRealtime();
             connectedLatch = new CountDownLatch(1);
         }
         try {
@@ -104,6 +112,11 @@ public final class ShizukuRemoteStopper {
         try {
             return local.forceStop(packageName);
         } catch (RemoteException e) {
+            // 远端服务可能已死但回调未到，主动清理以便下次重新绑定
+            synchronized (LOCK) {
+                controller = null;
+                bound = false;
+            }
             return false;
         }
     }
@@ -123,7 +136,14 @@ public final class ShizukuRemoteStopper {
             return;
         }
         try {
-            latch.await(5, TimeUnit.SECONDS);
+            if (!latch.await(5, TimeUnit.SECONDS)) {
+                // 超时后清空，避免后续每个包都重复等待 5 秒
+                synchronized (LOCK) {
+                    if (connectedLatch == latch) {
+                        connectedLatch = null;
+                    }
+                }
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -134,6 +154,7 @@ public final class ShizukuRemoteStopper {
             controller = null;
             bound = false;
             binding = false;
+            bindStartedAt = 0;
         }
         try {
             Shizuku.unbindUserService(ARGS, CONNECTION, remove);

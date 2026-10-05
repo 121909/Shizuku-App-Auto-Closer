@@ -25,10 +25,29 @@ public final class StopControllerService extends IStopController.Stub {
 
     @Override
     public boolean forceStop(String packageName) throws RemoteException {
-        if (packageName == null || packageName.isEmpty()) {
+        if (!isValidPackageName(packageName)) {
             return false;
         }
         return runForceStop(packageName);
+    }
+
+    /** 只允许合法包名字符，防止以 - 开头的参数被 /system/bin/am 解析为 flag。 */
+    private static boolean isValidPackageName(String packageName) {
+        if (packageName == null || packageName.isEmpty() || packageName.length() > 255) {
+            return false;
+        }
+        for (int i = 0; i < packageName.length(); i++) {
+            char c = packageName.charAt(i);
+            boolean ok = (c >= 'a' && c <= 'z')
+                    || (c >= 'A' && c <= 'Z')
+                    || (c >= '0' && c <= '9')
+                    || c == '_'
+                    || c == '.';
+            if (!ok) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override

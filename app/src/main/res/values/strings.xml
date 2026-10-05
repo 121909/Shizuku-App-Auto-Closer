@@ -2,5 +2,60 @@
     <string name="app_name">LockGuard</string>
     <string name="monitor_notification_title">LockGuard 正在监控</string>
     <string name="monitor_notification_channel">LockGuard 监控</string>
-</resources>
 
+    <!-- 监控状态 -->
+    <string name="status_select_app">请选择应用</string>
+    <string name="status_monitor_started">监控已启动</string>
+    <string name="status_monitor_connecting">监控已启动，Shizuku 还在连接</string>
+    <string name="status_monitor_stopped">监控已停止</string>
+    <string name="status_monitor_running">监控运行中</string>
+    <string name="status_monitor_not_running">监控未在运行</string>
+
+    <!-- Shizuku 状态 -->
+    <string name="shizuku_waiting">等待 Shizuku 连接</string>
+    <string name="shizuku_not_installed">未安装 Shizuku，请先安装</string>
+    <string name="shizuku_not_connected">未收到 Shizuku 连接：请确认 Shizuku 服务已启动（重启手机后需重新启动），可点击「重新连接」重试</string>
+    <string name="shizuku_old_version">当前 Shizuku 版本过旧</string>
+    <string name="shizuku_connected_needs_permission">Shizuku 已连接，等待授权</string>
+    <string name="shizuku_granted">Shizuku 已授权</string>
+    <string name="shizuku_requesting">正在请求 Shizuku 授权，请在弹窗中允许</string>
+    <string name="shizuku_denied">Shizuku 授权被拒绝，可再次点击「Shizuku 授权」重试</string>
+    <string name="shizuku_open_failed">无法打开 Shizuku</string>
+    <string name="shizuku_restarting">正在重启应用以重新连接 Shizuku…</string>
+
+    <!-- 按钮 -->
+    <string name="btn_shizuku_grant">Shizuku 授权</string>
+    <string name="btn_shizuku_open">打开 Shizuku</string>
+    <string name="btn_shizuku_reconnect">重新连接</string>
+    <string name="btn_notification">通知权限</string>
+    <string name="btn_start">启动监控</string>
+    <string name="btn_stop">停止监控</string>
+
+    <!-- 提示 -->
+    <string name="toast_select_first">先选择至少一个应用</string>
+    <string name="toast_same_time">开始时间和结束时间不能相同</string>
+    <string name="toast_delay_min">等待分钟数必须大于 0</string>
+    <string name="toast_notification_denied">通知权限未授予，前台服务通知可能不可见</string>
+
+    <!-- 界面文本 -->
+    <string name="label_status">等待状态</string>
+    <string name="label_selected_apps">已选应用</string>
+    <string name="selected_none">未选择应用</string>
+    <string name="selected_multi">已选择 %1$d 个应用</string>
+    <string name="selected_more">…</string>
+    <string name="label_choose_apps">选择应用</string>
+    <string name="label_unlock_cancel">解锁取消</string>
+    <string name="hint_delay">等待分钟数</string>
+    <string name="value_delay_default">10</string>
+    <string name="value_time_default_start">23:00</string>
+    <string name="value_time_default_end">07:00</string>
+    <string name="item_default_title">App</string>
+    <string name="item_default_package">package.name</string>
+
+    <!-- 通知 -->
+    <string name="monitor_preparing">准备监控</string>
+    <string name="monitor_status_closed">监控已关闭</string>
+    <string name="monitor_status_format">%1$s | %2$s | %3$s | 解锁取消=%4$s</string>
+    <string name="monitor_waiting_stop">等待关闭</string>
+    <string name="monitor_shizuku_missing">Shizuku 未授权</string>
+</resources>

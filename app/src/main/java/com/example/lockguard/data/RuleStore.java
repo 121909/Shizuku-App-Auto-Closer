@@ -14,8 +14,6 @@ public final class RuleStore {
     private static final String KEY_ENABLED = "enabled";
     private static final String KEY_PACKAGES = "packages";
     private static final String KEY_LABELS = "labels";
-    private static final String KEY_PACKAGE = "package";
-    private static final String KEY_LABEL = "label";
     private static final String KEY_START = "start";
     private static final String KEY_END = "end";
     private static final String KEY_DELAY = "delay";
@@ -27,13 +25,6 @@ public final class RuleStore {
         SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         ArrayList<String> packageNames = readStringArray(prefs.getString(KEY_PACKAGES, null));
         ArrayList<String> appLabels = readStringArray(prefs.getString(KEY_LABELS, null));
-        if (packageNames.isEmpty()) {
-            String legacyPackage = prefs.getString(KEY_PACKAGE, "");
-            if (legacyPackage != null && !legacyPackage.isEmpty()) {
-                packageNames.add(legacyPackage);
-                appLabels.add(prefs.getString(KEY_LABEL, ""));
-            }
-        }
         return new RuleConfig(
                 prefs.getBoolean(KEY_ENABLED, false),
                 packageNames,
@@ -51,19 +42,10 @@ public final class RuleStore {
                 .putBoolean(KEY_ENABLED, config.enabled)
                 .putString(KEY_PACKAGES, writeStringArray(config.packageNames))
                 .putString(KEY_LABELS, writeStringArray(config.appLabels))
-                .putString(KEY_PACKAGE, firstOrEmpty(config.packageNames))
-                .putString(KEY_LABEL, firstOrEmpty(config.appLabels))
                 .putInt(KEY_START, clampMinute(config.startMinuteOfDay))
                 .putInt(KEY_END, clampMinute(config.endMinuteOfDay))
                 .putInt(KEY_DELAY, Math.max(1, config.delayMinutes))
                 .putBoolean(KEY_CANCEL, config.cancelOnUnlock)
-                .apply();
-    }
-
-    public static void setEnabled(Context context, boolean enabled) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .edit()
-                .putBoolean(KEY_ENABLED, enabled)
                 .apply();
     }
 
@@ -97,9 +79,5 @@ public final class RuleStore {
             }
         }
         return array.toString();
-    }
-
-    private static String firstOrEmpty(List<String> values) {
-        return values == null || values.isEmpty() ? "" : values.get(0);
     }
 }

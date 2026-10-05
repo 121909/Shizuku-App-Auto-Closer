@@ -37,11 +37,13 @@ import java.util.Locale;
 import java.util.Map;
 
 import rikka.shizuku.Shizuku;
+import rikka.shizuku.ShizukuProvider;
 
 public final class MainActivity extends AppCompatActivity {
     private static final int REQ_SHIZUKU = 1001;
 
     private TextView statusView;
+    private TextView shizukuView;
     private TextView selectedAppView;
     private MaterialButton startTimeButton;
     private MaterialButton endTimeButton;
@@ -49,6 +51,8 @@ public final class MainActivity extends AppCompatActivity {
     private MaterialSwitch cancelOnUnlockSwitch;
     private Button requestShizukuButton;
     private Button requestNotificationButton;
+    private Button reconnectButton;
+    private View reconnectSpacer;
     private Button startButton;
     private Button stopButton;
     private RecyclerView appList;
@@ -69,7 +73,7 @@ public final class MainActivity extends AppCompatActivity {
     private final ActivityResultLauncher<String> notificationPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
                 if (!granted) {
-                    toast("通知权限未授予，前台服务通知可能不可见");
+                    toast(getString(R.string.toast_notification_denied));
                 }
             });
 
@@ -101,6 +105,7 @@ public final class MainActivity extends AppCompatActivity {
 
     private void bindViews() {
         statusView = findViewById(R.id.statusView);
+        shizukuView = findViewById(R.id.shizukuView);
         selectedAppView = findViewById(R.id.selectedAppView);
         startTimeButton = findViewById(R.id.startTimeButton);
         endTimeButton = findViewById(R.id.endTimeButton);
@@ -108,6 +113,8 @@ public final class MainActivity extends AppCompatActivity {
         cancelOnUnlockSwitch = findViewById(R.id.cancelOnUnlockSwitch);
         requestShizukuButton = findViewById(R.id.requestShizukuButton);
         requestNotificationButton = findViewById(R.id.requestNotificationButton);
+        reconnectButton = findViewById(R.id.reconnectButton);
+        reconnectSpacer = findViewById(R.id.reconnectSpacer);
         startButton = findViewById(R.id.startButton);
         stopButton = findViewById(R.id.stopButton);
         appList = findViewById(R.id.appList);
@@ -122,8 +129,9 @@ public final class MainActivity extends AppCompatActivity {
     private void setupListeners() {
         startTimeButton.setOnClickListener(v -> pickTime(true));
         endTimeButton.setOnClickListener(v -> pickTime(false));
-        requestShizukuButton.setOnClickListener(v -> ensureShizukuPermission());
+        requestShizukuButton.setOnClickListener(v -> onShizukuAction());
         requestNotificationButton.setOnClickListener(v -> maybeRequestNotificationPermission());
+        reconnectButton.setOnClickListener(v -> restartForReconnect());
         startButton.setOnClickListener(v -> startMonitoring());
         stopButton.setOnClickListener(v -> stopMonitoring());
 
@@ -170,11 +178,6 @@ public final class MainActivity extends AppCompatActivity {
                 }
                 updateSelectedAppView();
                 adapter.submit(apps, selectedPackages);
-                if (selectedPackages.isEmpty()) {
-                    if (statusView.getText() == null || statusView.getText().toString().startsWith("等待")) {
-                        statusView.setText("请选择应用");
-                    }
-                }
             });
         }).start();
     }
@@ -189,11 +192,14 @@ public final class MainActivity extends AppCompatActivity {
         }
         updateSelectedAppView();
         adapter.setSelectedPackages(selectedPackages);
+        if (selectedPackages.isEmpty()) {
+            statusView.setText(R.string.status_select_app);
+        }
     }
 
     private void updateSelectedAppView() {
         if (selectedPackages.isEmpty()) {
-            selectedAppView.setText("未选择应用");
+            selectedAppView.setText(R.string.selected_none);
         } else if (selectedPackages.size() == 1) {
             String packageName = selectedPackages.iterator().next();
             String label = selectedLabels.get(packageName);
@@ -202,18 +208,18 @@ public final class MainActivity extends AppCompatActivity {
                     packageName));
         } else {
             StringBuilder builder = new StringBuilder();
-            builder.append("已选择 ").append(selectedPackages.size()).append(" 个应用");
+            builder.append(getString(R.string.selected_multi, selectedPackages.size()));
             int shown = 0;
             for (String packageName : selectedPackages) {
                 if (shown >= 4) {
-                    builder.append("\n...");
+                    builder.append('\n').append(getString(R.string.selected_more));
                     break;
                 }
                 String label = selectedLabels.get(packageName);
                 builder.append('\n').append(label == null || label.isEmpty() ? packageName : label);
                 shown++;
             }
-            selectedAppView.setText(builder.toString());
+            selectedAppView.setText(builder);
         }
     }
 
@@ -250,7 +256,7 @@ public final class MainActivity extends AppCompatActivity {
         boolean bound = ShizukuRemoteStopper.ensureBound(this);
         Intent intent = new Intent(this, MonitorService.class).setAction(MonitorService.ACTION_START);
         ContextCompat.startForegroundService(this, intent);
-        statusView.setText(bound ? "监控已启动" : "监控已启动，Shizuku 还在连接");
+        statusView.setText(bound ? R.string.status_monitor_started : R.string.status_monitor_connecting);
         pendingStartAfterPermission = false;
     }
 
@@ -259,7 +265,7 @@ public final class MainActivity extends AppCompatActivity {
         ShizukuRemoteStopper.release(true);
         Intent intent = new Intent(this, MonitorService.class).setAction(MonitorService.ACTION_STOP);
         ContextCompat.startForegroundService(this, intent);
-        statusView.setText("监控已停止");
+        statusView.setText(R.string.status_monitor_stopped);
         pendingStartAfterPermission = false;
     }
 
@@ -277,39 +283,90 @@ public final class MainActivity extends AppCompatActivity {
 
     private boolean validateConfig() {
         if (selectedPackages.isEmpty()) {
-            toast("先选择至少一个应用");
+            toast(getString(R.string.toast_select_first));
             return false;
         }
         if (startMinute == endMinute) {
-            toast("开始时间和结束时间不能相同");
+            toast(getString(R.string.toast_same_time));
             return false;
         }
         if (delayMinutes < 1) {
-            toast("等待分钟数必须大于 0");
+            toast(getString(R.string.toast_delay_min));
             return false;
         }
         return true;
     }
 
+    /** Shizuku 按钮的上下文动作：未连接时打开 Shizuku 应用，已连接时请求授权。 */
+    private void onShizukuAction() {
+        if (!Shizuku.pingBinder()) {
+            if (!isShizukuInstalled()) {
+                shizukuView.setText(R.string.shizuku_not_installed);
+                return;
+            }
+            try {
+                Intent intent = getPackageManager()
+                        .getLaunchIntentForPackage(ShizukuProvider.MANAGER_APPLICATION_ID);
+                if (intent != null) {
+                    startActivity(intent);
+                    return;
+                }
+            } catch (Throwable ignore) {
+            }
+            shizukuView.setText(R.string.shizuku_open_failed);
+            return;
+        }
+        ensureShizukuPermission();
+    }
+
+    /**
+     * binder 未收到时，服务端只在应用进程启动时推送连接。
+     * 重启自身进程可强制重新接收（配置已持久化，监控服务由 START_STICKY 恢复）。
+     */
+    private void restartForReconnect() {
+        toast(getString(R.string.shizuku_restarting));
+        Intent intent = getPackageManager().getLaunchIntentForPackage(getPackageName());
+        if (intent != null) {
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+        }
+        finishAffinity();
+        Runtime.getRuntime().exit(0);
+    }
+
+    private boolean isShizukuInstalled() {
+        try {
+            getPackageManager().getPackageInfo(ShizukuProvider.MANAGER_APPLICATION_ID, 0);
+            return true;
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        }
+    }
+
     private boolean ensureShizukuPermission() {
+        if (!Shizuku.pingBinder()) {
+            shizukuView.setText(isShizukuInstalled()
+                    ? R.string.shizuku_not_connected
+                    : R.string.shizuku_not_installed);
+            updateShizukuStatus();
+            return false;
+        }
         try {
             if (Shizuku.isPreV11()) {
-                statusView.setText("当前 Shizuku 版本过旧");
+                shizukuView.setText(R.string.shizuku_old_version);
                 return false;
             }
             if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
-                statusView.setText("Shizuku 已授权");
+                shizukuView.setText(R.string.shizuku_granted);
                 return true;
             }
-            if (Shizuku.shouldShowRequestPermissionRationale()) {
-                statusView.setText("Shizuku 权限被拒绝，请在 Shizuku 中重新授权");
-                return false;
-            }
+            // 无论是否被拒绝过都再次请求：Shizuku 的弹窗可重复弹出，
+            // 直接放弃会让用户以为“未激活”。
             Shizuku.requestPermission(REQ_SHIZUKU);
-            statusView.setText("正在请求 Shizuku 权限");
+            shizukuView.setText(R.string.shizuku_requesting);
             return false;
         } catch (Throwable t) {
-            statusView.setText("Shizuku 还没有连接");
+            shizukuView.setText(R.string.shizuku_waiting);
             return false;
         }
     }
@@ -319,30 +376,70 @@ public final class MainActivity extends AppCompatActivity {
             return;
         }
         if (grantResult == PackageManager.PERMISSION_GRANTED) {
-            statusView.setText("Shizuku 已授权");
+            shizukuView.setText(R.string.shizuku_granted);
             if (pendingStartAfterPermission) {
                 startMonitoring();
             }
         } else {
             pendingStartAfterPermission = false;
-            statusView.setText("Shizuku 权限被拒绝");
+            shizukuView.setText(R.string.shizuku_denied);
         }
     }
 
     private void updateShizukuStatus() {
-        try {
-            if (Shizuku.isPreV11()) {
-                statusView.setText("Shizuku 版本过旧");
-                return;
+        boolean connected = Shizuku.pingBinder();
+        if (connected) {
+            try {
+                if (Shizuku.isPreV11()) {
+                    shizukuView.setText(R.string.shizuku_old_version);
+                } else if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
+                    shizukuView.setText(R.string.shizuku_granted);
+                } else {
+                    shizukuView.setText(R.string.shizuku_connected_needs_permission);
+                }
+            } catch (Throwable t) {
+                shizukuView.setText(R.string.shizuku_waiting);
             }
-            if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
-                statusView.setText("Shizuku 已连接且已授权");
-            } else {
-                statusView.setText("Shizuku 已连接，等待授权");
-            }
-        } catch (Throwable t) {
-            statusView.setText("等待 Shizuku 连接");
+        } else if (!isShizukuInstalled()) {
+            shizukuView.setText(R.string.shizuku_not_installed);
+        } else {
+            shizukuView.setText(R.string.shizuku_not_connected);
         }
+        reconnectButton.setVisibility(connected ? View.GONE : View.VISIBLE);
+        reconnectSpacer.setVisibility(connected ? View.GONE : View.VISIBLE);
+        requestShizukuButton.setText(connected
+                ? R.string.btn_shizuku_grant
+                : (isShizukuInstalled() ? R.string.btn_shizuku_open : R.string.btn_shizuku_grant));
+    }
+
+    /** 监控状态的唯一来源：服务存活标志 + 持久化配置。 */
+    private void refreshMonitoringStatus() {
+        if (MonitorService.isActive()) {
+            statusView.setText(R.string.status_monitor_running);
+            return;
+        }
+        if (selectedPackages.isEmpty()) {
+            statusView.setText(R.string.status_select_app);
+            return;
+        }
+        RuleConfig cfg = RuleStore.load(this);
+        statusView.setText(cfg.enabled
+                ? R.string.status_monitor_not_running
+                : R.string.status_monitor_stopped);
+    }
+
+    /** 配置为启用但服务未存活（进程被杀且 sticky 未恢复）时，在前台自动拉起。返回是否应显示运行中。 */
+    private boolean autoResumeMonitoring() {
+        if (MonitorService.isActive()) {
+            return true;
+        }
+        RuleConfig cfg = RuleStore.load(this);
+        if (!cfg.enabled || !cfg.hasTarget()) {
+            return false;
+        }
+        Intent intent = new Intent(this, MonitorService.class).setAction(MonitorService.ACTION_RELOAD);
+        ContextCompat.startForegroundService(this, intent);
+        return true;
     }
 
     @Override
@@ -350,6 +447,11 @@ public final class MainActivity extends AppCompatActivity {
         super.onResume();
         updateShizukuStatus();
         maybeRequestNotificationPermission();
+        if (autoResumeMonitoring()) {
+            statusView.setText(R.string.status_monitor_running);
+        } else {
+            refreshMonitoringStatus();
+        }
     }
 
     private void maybeRequestNotificationPermission() {
