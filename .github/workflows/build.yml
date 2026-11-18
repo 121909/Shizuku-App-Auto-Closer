@@ -71,17 +71,10 @@ jobs:
           REL_SHA=$(sha256sum "$RELEASE_APK" | awk '{print $1}')
           DBG_SHA=$(sha256sum "$DEBUG_APK" | awk '{print $1}')
           cat <<EOF > release_notes.md
-          ## 界面重构与体验升级 (v1.3)
+          ## 本次更新 (${GITHUB_REF_NAME})
 
-          - **Material 3 卡片化界面重构**：状态与主控合并为顶部状态卡片，未授权/缺失权限按钮仅在需要时出现，正常状态下自动隐藏，消除冗余大按钮
-          - **下滑自动折叠顶部面板**：采用 \`CoordinatorLayout\` + \`AppBarLayout\`，下滑应用列表时顶部状态与规则卡片自动收起，搜索栏与筛选工具条吸顶固定
-          - **紧凑规则展示**：生效时段明确标注 \`开始 / 结束\`，延迟输入标注 \`锁屏等待 xx 分钟\`，已选应用压缩为单行摘要
-          - **批量筛选与管理**：新增 \`仅看已选\`、\`系统应用\` 筛选 Chip，以及 \`全选当前\`、\`清空已选\`（带二次确认弹窗）与搜索框一键清空按钮
-          - **圆角列表项卡片**：应用列表改为圆角边框卡片，浅色/深色主题视觉更协调
-
-          ## 固定正式签名
-
-          - 配置 GitHub Secrets 固定 Release 签名（证书 SHA-256: \`2A:13:7B:CB:47:ED:D2:0C:9C:05:E1:19:FD:0B:B9:09:22:98:16:CD:99:24:24:14:DA:91:1D:BD:4A:85:EE:5D\`），后续 CI 每次构建的 \`app-release.apk\` 签名完全一致，支持直接覆盖升级
+          - **修复时间选择按钮文字换行截断问题**：优化「开始 / 结束」时段按钮与操作按钮内边距及高度自适应（\`wrap_content\` + \`minHeight\` + 单行限制），解决小屏或大字体下 \`开始 23:00\` / \`结束 07:00\` 上下显示不全的问题
+          - **包含 v1.3 全部 Material 3 卡片化界面与固定签名特性**：下滑自动折叠顶部面板、吸顶搜索框、\`仅看已选\` / \`系统应用\` / \`全选当前\` / \`清空已选\` 快捷筛选条，以及固定 Release 签名（证书 SHA-256: \`2A:13:7B:CB:47:ED:D2:0C:9C:05:E1:19:FD:0B:B9:09:22:98:16:CD:99:24:24:14:DA:91:1D:BD:4A:85:EE:5D\`）
 
           ## 校验
 
@@ -90,5 +83,5 @@ jobs:
           EOF
 
           gh release create "${GITHUB_REF_NAME}" "$RELEASE_APK" "$DEBUG_APK" \
-            --title "${GITHUB_REF_NAME} — Material 3 界面重构与固定签名发布" \
+            --title "${GITHUB_REF_NAME} — 修复时间按钮文字截断与显示优化" \
             --notes-file release_notes.md
