@@ -84,8 +84,9 @@ docker run --rm -v "$PWD":/workspace lockguard-builder
 
 ### GitHub Actions 自动构建与发布
 仓库已配置 [`.github/workflows/build.yml`](.github/workflows/build.yml)：
+- 已通过 GitHub Repository Secrets（`KEYSTORE_BASE64`、`KEYSTORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD`）固定正式签名密钥，每次构建的 `app-release.apk` 签名完全一致，支持直接覆盖升级。
 - 每次推送到分支或提交 PR 时，自动编译 `app-debug.apk` 与 `app-release.apk` 并上传至 Actions Artifacts。
-- 推送 `v*` 标签（如 `git tag v1.2 && git push origin v1.2`）时，自动创建 GitHub Release 并附带构建好的 APK 安装包及 SHA-256 校验值。
+- 推送 `v*` 标签（如 `git tag v1.3 && git push origin v1.3`）时，自动创建 GitHub Release 并附带构建好的 APK 安装包及 SHA-256 校验值。
 
 ---
 

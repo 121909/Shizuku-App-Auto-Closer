@@ -25,11 +25,31 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
+      - name: Configure Release Signing
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > release.jks
+          cat <<EOF > keystore.properties
+          storeFile=release.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
       - name: Build Debug & Release APKs
         run: ./gradlew :app:assembleDebug :app:assembleRelease --no-daemon
+
+      - name: Clean Signing Files
+        if: always()
+        run: rm -f release.jks keystore.properties
 
       - name: Upload APK Artifacts
         uses: actions/upload-artifact@v4
@@ -50,21 +70,17 @@ jobs:
           REL_SHA=$(sha256sum "$RELEASE_APK" | awk '{print $1}')
           DBG_SHA=$(sha256sum "$DEBUG_APK" | awk '{print $1}')
           cat <<EOF > release_notes.md
-          ## 核心机制与省电可靠性优化
+          ## 界面重构与体验升级 (v1.3)
 
-          - **息屏 Doze 休眠准时唤醒**：改用 \`AlarmManager.setAndAllowWhileIdle(ELAPSED_REALTIME_WAKEUP)\` 配合 15s 超时 \`PARTIAL_WAKE_LOCK\`，解决原先 \`Handler.postDelayed\` 在手机进入 CPU 深度休眠后停表导致的延迟关闭失准问题
-          - **单次锁屏周期防重复强杀**：新增 \`stoppedInCurrentLockSession\` 状态追踪，避免同一次锁屏期间每隔 \`delayMinutes\` 无限循环重复强行停止目标应用
-          - **移除 60 秒轮询**：去除全天候每分钟唤醒轮询，改为在锁屏处于时间窗外时精准预约时间窗起点唤醒检查，大幅降低后台耗电
-          - **无锁屏密码场景支持**：新增监听 \`ACTION_SCREEN_ON\`，未设锁屏密码直接亮屏时也能正确取消待执行任务
-          - **开机与覆盖更新自启**：新增 \`BootReceiver\` 监听 \`BOOT_COMPLETED\` 与 \`MY_PACKAGE_REPLACED\`，重启手机或更新应用后自动恢复监控服务
+          - **Material 3 卡片化界面重构**：状态与主控合并为顶部状态卡片，未授权/缺失权限按钮仅在需要时出现，正常状态下自动隐藏，消除冗余大按钮
+          - **下滑自动折叠顶部面板**：采用 \`CoordinatorLayout\` + \`AppBarLayout\`，下滑应用列表时顶部状态与规则卡片自动收起，搜索栏与筛选工具条吸顶固定
+          - **紧凑规则展示**：生效时段明确标注 \`开始 / 结束\`，延迟输入标注 \`锁屏等待 xx 分钟\`，已选应用压缩为单行摘要
+          - **批量筛选与管理**：新增 \`仅看已选\`、\`系统应用\` 筛选 Chip，以及 \`全选当前\`、\`清空已选\`（带二次确认弹窗）与搜索框一键清空按钮
+          - **圆角列表项卡片**：应用列表改为圆角边框卡片，浅色/深色主题视觉更协调
 
-          ## 性能与交互体验优化
+          ## 固定正式签名
 
-          - **Shizuku 强杀提速**：\`StopControllerService\` 优先通过反射直接调用系统 \`IActivityManager.forceStopPackage\`（毫秒级完成，零子进程开销），异常时无缝回退至 \`/system/bin/am force-stop\`
-          - **应用搜索与系统应用过滤**：主界面新增按应用名/包名实时搜索框及「显示系统应用」过滤开关（已选系统应用始终保留显示）
-          - **应用列表去重与防跳动**：按 \`packageName\` 去重多桌面入口应用；点击勾选时仅局部刷新当前行，不再立即重排导致列表跳动
-          - **运行中配置热重载**：监控运行中修改勾选应用、时间段、延迟或开关时自动保存并通知服务实时生效
-          - **最近执行记录与权限按钮优化**：主界面状态栏与常驻通知展示最近一次执行时间与关闭统计；通知权限授予后自动隐藏权限按钮
+          - 配置 GitHub Secrets 固定 Release 签名（证书 SHA-256: \`2A:13:7B:CB:47:ED:D2:0C:9C:05:E1:19:FD:0B:B9:09:22:98:16:CD:99:24:24:14:DA:91:1D:BD:4A:85:EE:5D\`），后续 CI 每次构建的 \`app-release.apk\` 签名完全一致，支持直接覆盖升级
 
           ## 校验
 
@@ -73,5 +89,5 @@ jobs:
           EOF
 
           gh release create "${GITHUB_REF_NAME}" "$RELEASE_APK" "$DEBUG_APK" \
-            --title "${GITHUB_REF_NAME} — Doze 准时唤醒、Shizuku 强杀提速与交互体验全面优化" \
+            --title "${GITHUB_REF_NAME} — Material 3 界面重构与固定签名发布" \
             --notes-file release_notes.md
