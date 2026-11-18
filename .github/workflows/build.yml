@@ -24,12 +24,14 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build Debug APK
-        run: ./gradlew :app:assembleDebug --no-daemon
+      - name: Build Debug & Release APKs
+        run: ./gradlew :app:assembleDebug :app:assembleRelease --no-daemon
 
-      - name: Upload Debug APK Artifact
+      - name: Upload APK Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: LockGuard-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: LockGuard-apks
+          path: |
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
