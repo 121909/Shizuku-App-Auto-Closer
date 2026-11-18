@@ -26,20 +26,21 @@ jobs:
           cache: 'gradle'
 
       - name: Configure Release Signing
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          printf '%s' "$KEYSTORE_BASE64" | base64 -d > release.jks
-          cat <<EOF > keystore.properties
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            printf '%s' "$KEYSTORE_BASE64" | base64 -d > release.jks
+            cat <<EOF > keystore.properties
           storeFile=release.jks
           storePassword=$KEYSTORE_PASSWORD
           keyAlias=$KEY_ALIAS
           keyPassword=$KEY_PASSWORD
           EOF
+          fi
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
