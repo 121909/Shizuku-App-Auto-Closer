@@ -1,5 +1,6 @@
 package com.example.lockguard.shizuku;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.os.RemoteException;
 import android.util.Log;
@@ -11,9 +12,14 @@ import com.example.lockguard.remote.IStopController;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.lang.reflect.Method;
 
 public final class StopControllerService extends IStopController.Stub {
     private static final String TAG = "StopControllerService";
+
+    private volatile Object activityManager;
+    private volatile Method forceStopPackageMethod;
+    private volatile boolean reflectionInitialized;
 
     public StopControllerService() {
     }
@@ -28,7 +34,56 @@ public final class StopControllerService extends IStopController.Stub {
         if (!isValidPackageName(packageName)) {
             return false;
         }
+        if (tryForceStopDirect(packageName)) {
+            return true;
+        }
         return runForceStop(packageName);
+    }
+
+    /**
+     * 优先在 Shizuku 特权进程内直接调用 IActivityManager.forceStopPackage(pkg, userId)，
+     * 避免每次强杀都 fork 一个 /system/bin/am 子进程，耗时从数百毫秒降至毫秒级。
+     */
+    @SuppressLint({"PrivateApi", "DiscouragedPrivateApi"})
+    private boolean tryForceStopDirect(String packageName) {
+        try {
+            if (!reflectionInitialized) {
+                synchronized (this) {
+                    if (!reflectionInitialized) {
+                        Object am = null;
+                        try {
+                            Class<?> amClass = Class.forName("android.app.ActivityManager");
+                            Method getService = amClass.getDeclaredMethod("getService");
+                            getService.setAccessible(true);
+                            am = getService.invoke(null);
+                        } catch (Throwable ignore) {
+                        }
+                        if (am == null) {
+                            Class<?> amnClass = Class.forName("android.app.ActivityManagerNative");
+                            Method getDefault = amnClass.getDeclaredMethod("getDefault");
+                            getDefault.setAccessible(true);
+                            am = getDefault.invoke(null);
+                        }
+                        if (am != null) {
+                            Method method = am.getClass().getMethod("forceStopPackage", String.class, int.class);
+                            method.setAccessible(true);
+                            activityManager = am;
+                            forceStopPackageMethod = method;
+                        }
+                        reflectionInitialized = true;
+                    }
+                }
+            }
+            Object am = activityManager;
+            Method method = forceStopPackageMethod;
+            if (am != null && method != null) {
+                method.invoke(am, packageName, 0);
+                return true;
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "Direct forceStopPackage failed for " + packageName + ", falling back to am command", t);
+        }
+        return false;
     }
 
     /** 只允许合法包名字符，防止以 - 开头的参数被 /system/bin/am 解析为 flag。 */

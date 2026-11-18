@@ -29,22 +29,38 @@ public final class AppAdapter extends RecyclerView.Adapter<AppAdapter.VH> {
     private final ArrayList<TargetApp> allItems = new ArrayList<>();
     private final Listener listener;
     private final HashSet<String> selectedPackages = new HashSet<>();
+    private String searchQuery = "";
+    private boolean showSystemApps = false;
 
     public AppAdapter(Listener listener) {
         this.listener = listener;
+        setHasStableIds(true);
     }
 
     public void submit(List<TargetApp> apps, Collection<String> selectedPackages) {
         allItems.clear();
         allItems.addAll(apps);
         setSelectedPackagesInternal(selectedPackages);
-        rebuildItems();
+        rebuildItems(true);
         notifyDataSetChanged();
     }
 
-    public void setSelectedPackages(Collection<String> selectedPackages) {
+    public void setSelectedPackages(Collection<String> selectedPackages, boolean resort) {
         setSelectedPackagesInternal(selectedPackages);
-        rebuildItems();
+        if (resort) {
+            rebuildItems(true);
+            notifyDataSetChanged();
+        }
+    }
+
+    public void setFilter(String query, boolean showSystem) {
+        String normalized = query == null ? "" : query.trim().toLowerCase(Locale.getDefault());
+        if (normalized.equals(this.searchQuery) && showSystem == this.showSystemApps) {
+            return;
+        }
+        this.searchQuery = normalized;
+        this.showSystemApps = showSystem;
+        rebuildItems(false);
         notifyDataSetChanged();
     }
 
@@ -60,12 +76,34 @@ public final class AppAdapter extends RecyclerView.Adapter<AppAdapter.VH> {
         }
     }
 
-    private void rebuildItems() {
+    private void rebuildItems(boolean resortAll) {
+        if (resortAll) {
+            allItems.sort(Comparator
+                    .comparing((TargetApp app) -> !selectedPackages.contains(app.packageName))
+                    .thenComparing(app -> app.label.toLowerCase(Locale.getDefault())));
+        }
         items.clear();
-        items.addAll(allItems);
-        items.sort(Comparator
-                .comparing((TargetApp app) -> !selectedPackages.contains(app.packageName))
-                .thenComparing(app -> app.label.toLowerCase(Locale.getDefault())));
+        for (TargetApp app : allItems) {
+            boolean isSelected = selectedPackages.contains(app.packageName);
+            if (!showSystemApps && app.isSystemApp && !isSelected) {
+                continue;
+            }
+            if (!searchQuery.isEmpty()) {
+                boolean matchLabel = app.label != null
+                        && app.label.toLowerCase(Locale.getDefault()).contains(searchQuery);
+                boolean matchPkg = app.packageName != null
+                        && app.packageName.toLowerCase(Locale.getDefault()).contains(searchQuery);
+                if (!matchLabel && !matchPkg) {
+                    continue;
+                }
+            }
+            items.add(app);
+        }
+    }
+
+    @Override
+    public long getItemId(int position) {
+        return items.get(position).packageName.hashCode();
     }
 
     @NonNull
@@ -85,7 +123,21 @@ public final class AppAdapter extends RecyclerView.Adapter<AppAdapter.VH> {
         holder.checkBox.setChecked(selected);
         holder.itemView.setBackgroundColor(ContextCompat.getColor(holder.itemView.getContext(),
                 selected ? R.color.item_selected : R.color.item_normal));
-        View.OnClickListener clickListener = v -> listener.onAppSelectionChanged(app, !selectedPackages.contains(app.packageName));
+        View.OnClickListener clickListener = v -> {
+            int adapterPos = holder.getBindingAdapterPosition();
+            if (adapterPos == RecyclerView.NO_POSITION) {
+                return;
+            }
+            TargetApp target = items.get(adapterPos);
+            boolean newSelected = !selectedPackages.contains(target.packageName);
+            if (newSelected) {
+                selectedPackages.add(target.packageName);
+            } else {
+                selectedPackages.remove(target.packageName);
+            }
+            notifyItemChanged(adapterPos);
+            listener.onAppSelectionChanged(target, newSelected);
+        };
         holder.itemView.setOnClickListener(clickListener);
         holder.checkBox.setOnClickListener(clickListener);
     }

@@ -44,6 +44,8 @@
     <string name="selected_multi">已选择 %1$d 个应用</string>
     <string name="selected_more">…</string>
     <string name="label_choose_apps">选择应用</string>
+    <string name="label_show_system_apps">显示系统应用</string>
+    <string name="hint_search_apps">搜索应用名称或包名</string>
     <string name="label_unlock_cancel">解锁取消</string>
     <string name="hint_delay">等待分钟数</string>
     <string name="value_delay_default">10</string>
@@ -51,6 +53,7 @@
     <string name="value_time_default_end">07:00</string>
     <string name="item_default_title">App</string>
     <string name="item_default_package">package.name</string>
+    <string name="last_execution_prefix">上次执行：%1$s</string>
 
     <!-- 通知 -->
     <string name="monitor_preparing">准备监控</string>

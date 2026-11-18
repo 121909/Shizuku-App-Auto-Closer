@@ -19,6 +19,10 @@ public final class RuleStore {
     private static final String KEY_DELAY = "delay";
     private static final String KEY_CANCEL = "cancel";
 
+    private static final String KEY_LAST_EXEC_TIME = "last_exec_time";
+    private static final String KEY_LAST_EXEC_SUCCESS = "last_exec_success";
+    private static final String KEY_LAST_EXEC_TOTAL = "last_exec_total";
+
     private RuleStore() {}
 
     public static RuleConfig load(Context context) {
@@ -47,6 +51,28 @@ public final class RuleStore {
                 .putInt(KEY_DELAY, Math.max(1, config.delayMinutes))
                 .putBoolean(KEY_CANCEL, config.cancelOnUnlock)
                 .apply();
+    }
+
+    public static void recordExecution(Context context, int successCount, int totalCount) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        prefs.edit()
+                .putLong(KEY_LAST_EXEC_TIME, System.currentTimeMillis())
+                .putInt(KEY_LAST_EXEC_SUCCESS, successCount)
+                .putInt(KEY_LAST_EXEC_TOTAL, totalCount)
+                .apply();
+    }
+
+    public static String getLastExecutionSummary(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        long timestamp = prefs.getLong(KEY_LAST_EXEC_TIME, 0L);
+        if (timestamp <= 0L) {
+            return null;
+        }
+        int success = prefs.getInt(KEY_LAST_EXEC_SUCCESS, 0);
+        int total = prefs.getInt(KEY_LAST_EXEC_TOTAL, 0);
+        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault());
+        String timeStr = sdf.format(new java.util.Date(timestamp));
+        return String.format(java.util.Locale.getDefault(), "%s (已关闭 %d/%d)", timeStr, success, total);
     }
 
     private static int clampMinute(int minute) {

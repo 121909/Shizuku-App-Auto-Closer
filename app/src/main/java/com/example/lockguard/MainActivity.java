@@ -10,6 +10,7 @@ import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.View;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -51,10 +52,13 @@ public final class MainActivity extends AppCompatActivity {
     private MaterialSwitch cancelOnUnlockSwitch;
     private Button requestShizukuButton;
     private Button requestNotificationButton;
+    private View notificationSpacer;
     private Button reconnectButton;
     private View reconnectSpacer;
     private Button startButton;
     private Button stopButton;
+    private EditText searchEdit;
+    private CheckBox showSystemCheck;
     private RecyclerView appList;
     private AppAdapter adapter;
 
@@ -65,6 +69,7 @@ public final class MainActivity extends AppCompatActivity {
     private int delayMinutes = 10;
     private boolean cancelOnUnlock = true;
     private boolean pendingStartAfterPermission;
+    private boolean loadingConfig;
 
     private final Shizuku.OnBinderReceivedListener binderReceivedListener = this::updateShizukuStatus;
     private final Shizuku.OnBinderDeadListener binderDeadListener = this::updateShizukuStatus;
@@ -72,6 +77,7 @@ public final class MainActivity extends AppCompatActivity {
 
     private final ActivityResultLauncher<String> notificationPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
+                updateNotificationButtonVisibility();
                 if (!granted) {
                     toast(getString(R.string.toast_notification_denied));
                 }
@@ -88,6 +94,7 @@ public final class MainActivity extends AppCompatActivity {
         loadApps();
         setupListeners();
         updateShizukuStatus();
+        updateNotificationButtonVisibility();
         maybeRequestNotificationPermission();
 
         Shizuku.addBinderReceivedListenerSticky(binderReceivedListener);
@@ -113,16 +120,20 @@ public final class MainActivity extends AppCompatActivity {
         cancelOnUnlockSwitch = findViewById(R.id.cancelOnUnlockSwitch);
         requestShizukuButton = findViewById(R.id.requestShizukuButton);
         requestNotificationButton = findViewById(R.id.requestNotificationButton);
+        notificationSpacer = findViewById(R.id.notificationSpacer);
         reconnectButton = findViewById(R.id.reconnectButton);
         reconnectSpacer = findViewById(R.id.reconnectSpacer);
         startButton = findViewById(R.id.startButton);
         stopButton = findViewById(R.id.stopButton);
+        searchEdit = findViewById(R.id.searchEdit);
+        showSystemCheck = findViewById(R.id.showSystemCheck);
         appList = findViewById(R.id.appList);
     }
 
     private void setupRecycler() {
         adapter = new AppAdapter(this::onAppSelected);
         appList.setLayoutManager(new LinearLayoutManager(this));
+        appList.setItemAnimator(null);
         appList.setAdapter(adapter);
     }
 
@@ -138,14 +149,37 @@ public final class MainActivity extends AppCompatActivity {
         delayEdit.addTextChangedListener(new SimpleWatcher() {
             @Override
             public void afterTextChanged(Editable s) {
-                delayMinutes = parseIntSafe(s.toString(), delayMinutes);
+                int parsed = parseIntSafe(s.toString(), -1);
+                if (parsed >= 1) {
+                    delayMinutes = parsed;
+                    syncRunningConfigIfActive();
+                }
             }
         });
 
-        cancelOnUnlockSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> cancelOnUnlock = isChecked);
+        cancelOnUnlockSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            cancelOnUnlock = isChecked;
+            syncRunningConfigIfActive();
+        });
+
+        searchEdit.addTextChangedListener(new SimpleWatcher() {
+            @Override
+            public void afterTextChanged(Editable s) {
+                updateAppFilter();
+            }
+        });
+
+        showSystemCheck.setOnCheckedChangeListener((buttonView, isChecked) -> updateAppFilter());
+    }
+
+    private void updateAppFilter() {
+        String query = searchEdit.getText() == null ? "" : searchEdit.getText().toString();
+        boolean showSystem = showSystemCheck.isChecked();
+        adapter.setFilter(query, showSystem);
     }
 
     private void loadSavedConfig() {
+        loadingConfig = true;
         RuleConfig config = RuleStore.load(this);
         selectedPackages.clear();
         selectedPackages.addAll(config.packageNames);
@@ -165,6 +199,7 @@ public final class MainActivity extends AppCompatActivity {
         delayEdit.setText(String.valueOf(delayMinutes));
         cancelOnUnlockSwitch.setChecked(cancelOnUnlock);
         updateSelectedAppView();
+        loadingConfig = false;
     }
 
     private void loadApps() {
@@ -191,10 +226,29 @@ public final class MainActivity extends AppCompatActivity {
             selectedLabels.remove(app.packageName);
         }
         updateSelectedAppView();
-        adapter.setSelectedPackages(selectedPackages);
+        // 点击勾选时不重排列表，防止列表滚动跳动
+        adapter.setSelectedPackages(selectedPackages, false);
         if (selectedPackages.isEmpty()) {
+            if (MonitorService.isActive()) {
+                stopMonitoring();
+            }
             statusView.setText(R.string.status_select_app);
+        } else {
+            syncRunningConfigIfActive();
         }
+    }
+
+    /** 若监控已处于运行中，用户修改参数后实时保存并通知服务重新加载。 */
+    private void syncRunningConfigIfActive() {
+        if (loadingConfig || !MonitorService.isActive()) {
+            return;
+        }
+        if (selectedPackages.isEmpty() || startMinute == endMinute || delayMinutes < 1) {
+            return;
+        }
+        saveConfig(true, false);
+        Intent intent = new Intent(this, MonitorService.class).setAction(MonitorService.ACTION_RELOAD);
+        ContextCompat.startForegroundService(this, intent);
     }
 
     private void updateSelectedAppView() {
@@ -236,6 +290,7 @@ public final class MainActivity extends AppCompatActivity {
                 endMinute = total;
                 endTimeButton.setText(formatMinute(total));
             }
+            syncRunningConfigIfActive();
         }, hour, min, true).show();
     }
 
@@ -252,24 +307,25 @@ public final class MainActivity extends AppCompatActivity {
             return;
         }
 
-        saveConfig(true);
+        saveConfig(true, true);
         boolean bound = ShizukuRemoteStopper.ensureBound(this);
         Intent intent = new Intent(this, MonitorService.class).setAction(MonitorService.ACTION_START);
         ContextCompat.startForegroundService(this, intent);
-        statusView.setText(bound ? R.string.status_monitor_started : R.string.status_monitor_connecting);
+        statusView.setText(bound ? getStatusWithLastExec(R.string.status_monitor_started)
+                : getString(R.string.status_monitor_connecting));
         pendingStartAfterPermission = false;
     }
 
     private void stopMonitoring() {
-        saveConfig(false);
+        saveConfig(false, false);
         ShizukuRemoteStopper.release(true);
         Intent intent = new Intent(this, MonitorService.class).setAction(MonitorService.ACTION_STOP);
         ContextCompat.startForegroundService(this, intent);
-        statusView.setText(R.string.status_monitor_stopped);
+        statusView.setText( getStatusWithLastExec(R.string.status_monitor_stopped));
         pendingStartAfterPermission = false;
     }
 
-    private void saveConfig(boolean enabled) {
+    private void saveConfig(boolean enabled, boolean resortList) {
         ArrayList<String> packages = new ArrayList<>(selectedPackages);
         ArrayList<String> labels = new ArrayList<>();
         for (String packageName : packages) {
@@ -278,7 +334,7 @@ public final class MainActivity extends AppCompatActivity {
         }
         RuleConfig config = new RuleConfig(enabled, packages, labels, startMinute, endMinute, delayMinutes, cancelOnUnlock);
         RuleStore.save(this, config);
-        adapter.setSelectedPackages(selectedPackages);
+        adapter.setSelectedPackages(selectedPackages, resortList);
     }
 
     private boolean validateConfig() {
@@ -360,8 +416,6 @@ public final class MainActivity extends AppCompatActivity {
                 shizukuView.setText(R.string.shizuku_granted);
                 return true;
             }
-            // 无论是否被拒绝过都再次请求：Shizuku 的弹窗可重复弹出，
-            // 直接放弃会让用户以为“未激活”。
             Shizuku.requestPermission(REQ_SHIZUKU);
             shizukuView.setText(R.string.shizuku_requesting);
             return false;
@@ -415,7 +469,7 @@ public final class MainActivity extends AppCompatActivity {
     /** 监控状态的唯一来源：服务存活标志 + 持久化配置。 */
     private void refreshMonitoringStatus() {
         if (MonitorService.isActive()) {
-            statusView.setText(R.string.status_monitor_running);
+            statusView.setText(getStatusWithLastExec(R.string.status_monitor_running));
             return;
         }
         if (selectedPackages.isEmpty()) {
@@ -423,9 +477,18 @@ public final class MainActivity extends AppCompatActivity {
             return;
         }
         RuleConfig cfg = RuleStore.load(this);
-        statusView.setText(cfg.enabled
+        statusView.setText(getStatusWithLastExec(cfg.enabled
                 ? R.string.status_monitor_not_running
-                : R.string.status_monitor_stopped);
+                : R.string.status_monitor_stopped));
+    }
+
+    private String getStatusWithLastExec(int statusResId) {
+        String base = getString(statusResId);
+        String lastExec = RuleStore.getLastExecutionSummary(this);
+        if (lastExec == null) {
+            return base;
+        }
+        return base + " · " + getString(R.string.last_execution_prefix, lastExec);
     }
 
     /** 配置为启用但服务未存活（进程被杀且 sticky 未恢复）时，在前台自动拉起。返回是否应显示运行中。 */
@@ -446,16 +509,30 @@ public final class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         updateShizukuStatus();
-        maybeRequestNotificationPermission();
+        updateNotificationButtonVisibility();
         if (autoResumeMonitoring()) {
-            statusView.setText(R.string.status_monitor_running);
+            statusView.setText(getStatusWithLastExec(R.string.status_monitor_running));
         } else {
             refreshMonitoringStatus();
         }
     }
 
+    private boolean isNotificationPermissionGranted() {
+        if (Build.VERSION.SDK_INT < 33) {
+            return true;
+        }
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void updateNotificationButtonVisibility() {
+        boolean granted = isNotificationPermissionGranted();
+        requestNotificationButton.setVisibility(granted ? View.GONE : View.VISIBLE);
+        notificationSpacer.setVisibility(granted ? View.GONE : View.VISIBLE);
+    }
+
     private void maybeRequestNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+        if (!isNotificationPermissionGranted()) {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS);
         }
     }
