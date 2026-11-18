@@ -40,20 +40,38 @@
     <!-- 界面文本 -->
     <string name="label_status">等待状态</string>
     <string name="label_selected_apps">已选应用</string>
-    <string name="selected_none">未选择应用</string>
-    <string name="selected_multi">已选择 %1$d 个应用</string>
-    <string name="selected_more">…</string>
+    <string name="selected_none">未选择任何应用，请在下方勾选</string>
+    <string name="selected_summary_one">已选 1 个：%1$s</string>
+    <string name="selected_summary_multi">已选 %1$d 个：%2$s</string>
+    <string name="selected_more"> 等</string>
+    <string name="label_time_window">生效时段</string>
+    <string name="label_start_time_btn">开始 %1$s</string>
+    <string name="label_end_time_btn">结束 %1$s</string>
+    <string name="label_delay_prefix">锁屏等待</string>
+    <string name="label_delay_unit">分钟</string>
     <string name="label_choose_apps">选择应用</string>
-    <string name="label_show_system_apps">显示系统应用</string>
+    <string name="label_show_system_apps">系统应用</string>
+    <string name="label_only_selected">仅看已选</string>
+    <string name="label_only_selected_count">仅看已选 (%1$d)</string>
+    <string name="action_select_visible">全选当前</string>
+    <string name="action_clear_selected">清空已选</string>
+    <string name="dialog_clear_title">清空已选应用</string>
+    <string name="dialog_clear_message">确定取消勾选全部 %1$d 个应用吗？（若正在监控将同时停止监控）</string>
+    <string name="dialog_confirm">确定</string>
+    <string name="dialog_cancel">取消</string>
     <string name="hint_search_apps">搜索应用名称或包名</string>
     <string name="label_unlock_cancel">解锁取消</string>
-    <string name="hint_delay">等待分钟数</string>
+    <string name="hint_delay">10</string>
     <string name="value_delay_default">10</string>
     <string name="value_time_default_start">23:00</string>
     <string name="value_time_default_end">07:00</string>
     <string name="item_default_title">App</string>
     <string name="item_default_package">package.name</string>
     <string name="last_execution_prefix">上次执行：%1$s</string>
+    <string name="toast_selected_visible">已勾选当前显示的 %1$d 个应用</string>
+    <string name="toast_cleared_all">已清空全部选择</string>
+    <string name="badge_running">运行中</string>
+    <string name="badge_stopped">已停止</string>
 
     <!-- 通知 -->
     <string name="monitor_preparing">准备监控</string>

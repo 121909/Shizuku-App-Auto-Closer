@@ -1,10 +1,24 @@
 <resources>
-    <color name="screen_background">#101418</color>
+    <color name="screen_background">#0B0F14</color>
+    <color name="card_background">#151B23</color>
+    <color name="card_stroke">#26303D</color>
+    <color name="search_background">#1E2631</color>
     <color name="text_primary">#F8FAFC</color>
-    <color name="text_secondary">#CBD5E1</color>
-    <color name="item_normal">#151B22</color>
-    <color name="item_selected">#123149</color>
-    <color name="control_tint">#CBD5E1</color>
+    <color name="text_secondary">#94A3B8</color>
+    <color name="item_normal">#151B23</color>
+    <color name="item_selected">#172A45</color>
+    <color name="item_selected_stroke">#3B82F6</color>
+    <color name="control_tint">#94A3B8</color>
+
+    <color name="status_running_bg">#052E16</color>
+    <color name="status_running_text">#4ADE80</color>
+    <color name="status_stopped_bg">#1E293B</color>
+    <color name="status_stopped_text">#94A3B8</color>
+    <color name="status_warning_bg">#451A03</color>
+    <color name="status_warning_text">#FBBF24</color>
+    <color name="btn_stop_bg">#450A0A</color>
+    <color name="btn_stop_text">#FCA5A5</color>
+
     <color name="md_theme_light_primary">#2563EB</color>
     <color name="md_theme_light_secondary">#0F766E</color>
     <color name="md_theme_light_tertiary">#B91C1C</color>
